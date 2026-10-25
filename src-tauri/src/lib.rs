@@ -154,6 +154,8 @@ pub fn run() {
             commands::settings_commands::set_theme,
             commands::settings_commands::set_launch_at_login,
             commands::settings_commands::get_launch_at_login,
+            commands::settings_commands::pick_zen_path,
+            commands::settings_commands::clear_zen_path,
             commands::settings_commands::get_version_info,
             commands::settings_commands::open_settings_folder,
         ])

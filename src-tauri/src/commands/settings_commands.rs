@@ -49,6 +49,51 @@ pub fn get_launch_at_login(app: tauri::AppHandle) -> Result<bool, String> {
     app.autolaunch().is_enabled().map_err(|e| e.to_string())
 }
 
+// ── Zen Browser ───────────────────────────────────────────────────────────────
+
+/// Opens a native file picker for the Zen Browser executable (a `.app` bundle
+/// on macOS, an executable elsewhere), validates it, and stores it as the
+/// custom launch path.
+///
+/// Returns `Ok(None)` when the user cancels the picker, so the caller can
+/// leave the current setting untouched.
+///
+/// Uses `pick_file(callback)` rather than `blocking_pick_file()` because the
+/// blocking variant dispatches NSOpenPanel.runModal() via dispatch_sync, which
+/// conflicts with WRY/tao's main-thread event loop on macOS.
+#[tauri::command]
+pub async fn pick_zen_path(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::{DialogExt, FilePath};
+
+    let (tx, rx) = tokio::sync::oneshot::channel::<Option<FilePath>>();
+
+    app.dialog().file().pick_file(move |path| {
+        let _ = tx.send(path);
+    });
+
+    let picked = rx
+        .await
+        .map_err(|_| "Dialog was dropped unexpectedly".to_string())?;
+
+    let Some(file_path) = picked else {
+        return Ok(None); // user cancelled
+    };
+
+    let FilePath::Path(path) = file_path else {
+        return Err("Unsupported file path type".into());
+    };
+
+    let path_str = path.to_string_lossy().to_string();
+    app_config_service::set_zen_path(Some(&path_str))?;
+    Ok(Some(path_str))
+}
+
+/// Clears the custom Zen Browser path, restoring automatic detection.
+#[tauri::command]
+pub fn clear_zen_path() -> Result<(), String> {
+    app_config_service::set_zen_path(None)
+}
+
 // ── About ─────────────────────────────────────────────────────────────────────
 
 /// Returns static version and platform information for the Settings → About section.

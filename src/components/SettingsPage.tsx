@@ -8,10 +8,11 @@ import {
   Sun,
   FolderOpen,
   ExternalLink,
+  RotateCcw,
 } from "lucide-react";
 
 import { Link } from "react-router-dom";
-import type { Theme, VersionInfo } from "../types/app_config";
+import type { AppConfig, Theme, VersionInfo } from "../types/app_config";
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -26,6 +27,8 @@ export default function SettingsPage({ theme, onThemeChange }: Props) {
   const [launchAtLogin, setLaunchAtLogin] = React.useState(false);
   const [launchError, setLaunchError] = React.useState<string | null>(null);
   const [versionInfo, setVersionInfo] = React.useState<VersionInfo | null>(null);
+  const [zenPath, setZenPath] = React.useState<string | null>(null);
+  const [zenError, setZenError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     // Read launch-at-login state from the OS via the autostart plugin.
@@ -37,6 +40,11 @@ export default function SettingsPage({ theme, onThemeChange }: Props) {
     invoke<VersionInfo>("get_version_info")
       .then(setVersionInfo)
       .catch((err) => console.error("get_version_info:", err));
+
+    // Fetch the custom Zen path; absent means auto-detection is in effect.
+    invoke<AppConfig>("get_app_config")
+      .then((cfg) => setZenPath(cfg.zen_path ?? null))
+      .catch((err) => console.error("get_app_config:", err));
   }, []);
 
   async function handleLaunchAtLoginToggle() {
@@ -59,6 +67,31 @@ export default function SettingsPage({ theme, onThemeChange }: Props) {
       await invoke("open_settings_folder");
     } catch (err) {
       console.error("open_settings_folder:", err);
+    }
+  }
+
+  async function handleChooseZenPath() {
+    setZenError(null);
+    try {
+      // Resolves to null when the user cancels the picker — keep the old value.
+      const picked = await invoke<string | null>("pick_zen_path");
+      if (picked !== null) setZenPath(picked);
+    } catch (err) {
+      setZenError(
+        typeof err === "string" ? err : "Failed to choose a Zen Browser path."
+      );
+    }
+  }
+
+  async function handleClearZenPath() {
+    setZenError(null);
+    try {
+      await invoke("clear_zen_path");
+      setZenPath(null);
+    } catch (err) {
+      setZenError(
+        typeof err === "string" ? err : "Failed to reset the Zen Browser path."
+      );
     }
   }
 
@@ -142,6 +175,39 @@ export default function SettingsPage({ theme, onThemeChange }: Props) {
           {launchError && (
             <p className="px-5 pb-3 text-xs text-destructive font-medium" role="alert">
               {launchError}
+            </p>
+          )}
+        </Section>
+
+        {/* ── Browser ─────────────────────────────────────────────────── */}
+        <Section title="Browser">
+          <Row
+            label="Zen Browser"
+            description={
+              zenPath ??
+              "Automatically detected from the default install locations."
+            }
+          >
+            <div className="flex items-center gap-2">
+              <OutlineButton
+                id="btn-choose-zen"
+                icon={<FolderOpen size={13} />}
+                label="Choose…"
+                onClick={handleChooseZenPath}
+              />
+              {zenPath && (
+                <OutlineButton
+                  id="btn-reset-zen"
+                  icon={<RotateCcw size={13} />}
+                  label="Auto-detect"
+                  onClick={handleClearZenPath}
+                />
+              )}
+            </div>
+          </Row>
+          {zenError && (
+            <p className="px-5 pb-3 text-xs text-destructive font-medium" role="alert">
+              {zenError}
             </p>
           )}
         </Section>

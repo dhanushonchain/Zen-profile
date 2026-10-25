@@ -6,6 +6,12 @@ export type Theme = "system" | "dark" | "light";
 export interface AppConfig {
   theme: Theme;
   launch_at_login: boolean;
+  /**
+   * User-chosen Zen Browser path (a `.app` bundle on macOS, an executable
+   * elsewhere). Absent when the app should auto-detect the install location.
+   * Mirrors `zen_path` in the Rust AppConfig.
+   */
+  zen_path?: string;
 }
 
 export interface VersionInfo {
