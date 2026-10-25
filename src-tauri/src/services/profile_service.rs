@@ -13,11 +13,19 @@ use std::path::Path;
 pub fn get_profiles() -> Result<Vec<Profile>, String> {
     let mut profiles = load_profiles_from(&platform::profiles_ini_path())?;
 
-    // Attach custom names and avatar filenames from settings.json.
-    // display_name overrides the Zen Browser profile name when set.
-    // avatar holds a filename the frontend converts to a data URL via load_avatar.
     let settings = avatar_service::all_settings();
-    for profile in &mut profiles {
+    apply_settings(&mut profiles, &settings);
+
+    Ok(profiles)
+}
+
+/// Overlays custom display names and avatars from settings.json.
+///
+/// Only `name` and `avatar` are replaced — `zen_name` is deliberately left
+/// untouched so that launching keeps addressing the real profile recorded in
+/// `profiles.ini`, even after the user renames it in this app.
+fn apply_settings(profiles: &mut [Profile], settings: &avatar_service::AppSettings) {
+    for profile in profiles {
         if let Some(setting) = settings.profiles.get(&profile.id) {
             if let Some(name) = &setting.display_name {
                 profile.name = name.clone();
@@ -27,8 +35,6 @@ pub fn get_profiles() -> Result<Vec<Profile>, String> {
             }
         }
     }
-
-    Ok(profiles)
 }
 
 /// Loads and parses `profiles.ini` at `path`.
@@ -71,6 +77,7 @@ fn profiles_from_ini(ini: &Ini) -> Vec<Profile> {
 
         profiles.push(Profile {
             id: path.clone(),
+            zen_name: name.clone(),
             name,
             path,
             is_default,
@@ -195,6 +202,7 @@ pub fn create_profile(name: &str) -> Result<Profile, String> {
 
     Ok(Profile {
         id: relative_path.clone(),
+        zen_name: trimmed.to_string(),
         name: trimmed.to_string(),
         path: relative_path,
         is_default: false,
@@ -350,13 +358,60 @@ Path=Profiles/ef56gh78.work
 
         assert_eq!(profiles[0].id, "Profiles/ab12cd34.zen");
         assert_eq!(profiles[0].name, "zen");
+        assert_eq!(profiles[0].zen_name, "zen");
         assert_eq!(profiles[0].path, "Profiles/ab12cd34.zen");
         assert!(profiles[0].is_default);
         assert!(profiles[0].avatar.is_none());
 
         assert_eq!(profiles[1].id, "Profiles/ef56gh78.work");
         assert_eq!(profiles[1].name, "work");
+        assert_eq!(profiles[1].zen_name, "work");
         assert!(!profiles[1].is_default);
+    }
+
+    // ── apply_settings ────────────────────────────────────────────────────────
+
+    #[test]
+    fn a_custom_display_name_does_not_change_zen_name() {
+        let ini = Ini::load_from_str("[Profile0]\nName=zen\nPath=Profiles/abc.zen\n").unwrap();
+        let mut profiles = profiles_from_ini(&ini);
+
+        let mut settings = avatar_service::AppSettings::default();
+        settings.profiles.insert(
+            "Profiles/abc.zen".to_string(),
+            avatar_service::ProfileSettings {
+                display_name: Some("Work".to_string()),
+                ..Default::default()
+            },
+        );
+
+        apply_settings(&mut profiles, &settings);
+
+        // The UI shows the custom name...
+        assert_eq!(profiles[0].name, "Work");
+        // ...but launching must still address the real profile recorded in
+        // profiles.ini, or Zen would be asked to open a name that does not exist.
+        assert_eq!(profiles[0].zen_name, "zen");
+    }
+
+    #[test]
+    fn settings_only_apply_to_matching_profiles() {
+        let ini = Ini::load_from_str("[Profile0]\nName=zen\nPath=Profiles/abc.zen\n").unwrap();
+        let mut profiles = profiles_from_ini(&ini);
+
+        let mut settings = avatar_service::AppSettings::default();
+        settings.profiles.insert(
+            "Profiles/someone-else".to_string(),
+            avatar_service::ProfileSettings {
+                display_name: Some("Other".to_string()),
+                ..Default::default()
+            },
+        );
+
+        apply_settings(&mut profiles, &settings);
+
+        assert_eq!(profiles[0].name, "zen");
+        assert_eq!(profiles[0].zen_name, "zen");
     }
 
     #[test]
@@ -386,6 +441,7 @@ Default=Profiles/abc.zen
 
         assert_eq!(profiles.len(), 1);
         assert_eq!(profiles[0].name, "Unknown");
+        assert_eq!(profiles[0].zen_name, "Unknown");
         assert_eq!(profiles[0].path, "");
         assert!(!profiles[0].is_default);
     }

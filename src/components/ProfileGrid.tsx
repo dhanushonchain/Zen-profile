@@ -70,7 +70,10 @@ export default function ProfileGrid({
 
   async function handleProfileClick(profile: Profile) {
     await invoke("launch_profile", {
-      profileId: profile.name,
+      // Launch by the profile's real profiles.ini name. `profile.name` is the
+      // display name and diverges from it as soon as the profile is renamed,
+      // which would ask Zen to open a profile that does not exist.
+      profileId: profile.zen_name,
     });
   }
 
@@ -141,9 +144,9 @@ export default function ProfileGrid({
     setShowNewProfileModal(false);
 
     if (launchAfter) {
-      // The new profile has no custom display_name yet, so profile.name
-      // matches the canonical Zen profile name stored in profiles.ini.
-      await invoke("launch_profile", { profileId: newProfile.name });
+      // Use zen_name rather than name so this stays correct even once the
+      // profile carries a custom display name of its own.
+      await invoke("launch_profile", { profileId: newProfile.zen_name });
     }
   }
 
