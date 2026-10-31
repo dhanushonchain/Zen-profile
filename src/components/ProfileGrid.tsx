@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Plus, RotateCcw, TriangleAlert } from "lucide-react";
+import { Plus, RotateCcw, Search, TriangleAlert, X } from "lucide-react";
 
 import ProfileCard from "./ProfileCard";
 import NewProfileModal from "./NewProfileModal";
@@ -19,6 +19,7 @@ export default function ProfileGrid({
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     loadProfiles();
@@ -147,6 +148,13 @@ export default function ProfileGrid({
     }
   }
 
+  // Search filter: case-insensitive substring match on the display name.
+  // Recomputed each render — no memo is needed at this scale.
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleProfiles = normalizedQuery
+    ? profiles.filter((p) => p.name.toLowerCase().includes(normalizedQuery))
+    : profiles;
+
   if (loading) {
     return (
       <div className="flex justify-center py-24 text-muted-foreground">
@@ -206,65 +214,141 @@ export default function ProfileGrid({
 
   return (
     <>
-      <section className="mx-auto grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6 max-w-fit px-6 pb-12 justify-items-center">
-        {profiles.map((profile) => (
-          <ProfileCard
-            key={profile.id}
-            profile={profile}
-            onClick={handleProfileClick}
-            onAvatarClick={handleAvatarClick}
-            onAvatarRemove={handleAvatarRemove}
-            onRename={handleRename}
+      {/* ── Search bar ────────────────────────────────────────────────────── */}
+      <div className="flex justify-center px-6 pb-9">
+        <div className="relative w-full max-w-xs">
+          <Search
+            size={14}
+            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground/70"
           />
-        ))}
+          <input
+            id="profile-search"
+            aria-label="Search profiles"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setQuery("");
+            }}
+            placeholder="Search profiles…"
+            className="
+              w-full rounded-2xl border border-border bg-card/60
+              py-2 pl-9 pr-9
+              text-sm text-foreground placeholder:text-muted-foreground/60
+              outline-none transition-colors duration-150
+              focus:border-primary/45 focus:bg-card
+            "
+          />
+          {query !== "" && (
+            <button
+              id="clear-profile-search"
+              aria-label="Clear search"
+              onClick={() => setQuery("")}
+              className="
+                absolute right-3 top-1/2 -translate-y-1/2
+                text-muted-foreground/70
+                transition-colors duration-150
+                hover:text-foreground
+              "
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      </div>
 
-        {/* ── New Profile Card ─────────────────────────────────────────────── */}
-        <button
-          id="new-profile-card"
-          onClick={() => setShowNewProfileModal(true)}
-          className="
-            group
-            w-[160px]
-            h-[160px]
-            cursor-pointer
-            flex flex-col items-center justify-center
-            rounded-3xl
-            border border-dashed border-border
-            bg-card/40
-            p-5
-            transition-all duration-200
-            ease-out
-            shadow-[0_4px_15px_-4px_rgba(0,0,0,0.05)]
-            dark:shadow-none
-            hover:border-primary/40
-            hover:bg-card/85
-            hover:shadow-[0_8px_25px_-6px_rgba(247,111,83,0.1)]
-            dark:hover:shadow-[0_8px_30px_-8px_rgba(247,111,83,0.2)]
-          "
-        >
-          <div
-            className="
-              mb-4 flex h-14 w-14 items-center justify-center
-              rounded-full border border-dashed border-border
-              text-muted-foreground
-              transition-colors duration-200
-              group-hover:border-foreground/40
-              group-hover:text-foreground
-            "
-          >
-            <Plus size={22} />
+      {visibleProfiles.length === 0 ? (
+        /* No matches — mirrors the load-error styling above for consistency. */
+        <div className="flex flex-col items-center justify-center py-16 px-4 text-center animate-in fade-in duration-150 ease-out">
+          <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-dashed border-border bg-card/30 text-muted-foreground/60">
+            <Search size={28} strokeWidth={1.5} />
           </div>
-          <span
+
+          <h3 className="text-lg font-medium tracking-tight text-foreground mb-2">
+            No Matching Profiles
+          </h3>
+
+          <p className="text-sm text-muted-foreground font-normal max-w-md mb-6 leading-relaxed break-words">
+            No profiles match &ldquo;{query.trim()}&rdquo;.
+          </p>
+
+          <button
+            onClick={() => setQuery("")}
             className="
-              text-sm font-medium text-muted-foreground
-              transition-colors duration-200
-              group-hover:text-foreground
+              flex items-center gap-1.5
+              rounded-xl
+              border border-border
+              px-5 py-2
+              text-sm font-medium text-foreground
+              transition-colors duration-150
+              hover:bg-card
+              shadow-sm
             "
           >
-            New Profile
-          </span>
-        </button>
-      </section>
+            <RotateCcw size={14} />
+            Clear Search
+          </button>
+        </div>
+      ) : (
+        <section className="mx-auto grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6 max-w-fit px-6 pb-12 justify-items-center">
+          {visibleProfiles.map((profile) => (
+            <ProfileCard
+              key={profile.id}
+              profile={profile}
+              onClick={handleProfileClick}
+              onAvatarClick={handleAvatarClick}
+              onAvatarRemove={handleAvatarRemove}
+              onRename={handleRename}
+            />
+          ))}
+
+          {/* ── New Profile Card ─────────────────────────────────────────── */}
+          <button
+            id="new-profile-card"
+            onClick={() => setShowNewProfileModal(true)}
+            className="
+              group
+              w-[160px]
+              h-[160px]
+              cursor-pointer
+              flex flex-col items-center justify-center
+              rounded-3xl
+              border border-dashed border-border
+              bg-card/40
+              p-5
+              transition-all duration-200
+              ease-out
+              shadow-[0_4px_15px_-4px_rgba(0,0,0,0.05)]
+              dark:shadow-none
+              hover:border-primary/40
+              hover:bg-card/85
+              hover:shadow-[0_8px_25px_-6px_rgba(247,111,83,0.1)]
+              dark:hover:shadow-[0_8px_30px_-8px_rgba(247,111,83,0.2)]
+            "
+          >
+            <div
+              className="
+                mb-4 flex h-14 w-14 items-center justify-center
+                rounded-full border border-dashed border-border
+                text-muted-foreground
+                transition-colors duration-200
+                group-hover:border-foreground/40
+                group-hover:text-foreground
+              "
+            >
+              <Plus size={22} />
+            </div>
+            <span
+              className="
+                text-sm font-medium text-muted-foreground
+                transition-colors duration-200
+                group-hover:text-foreground
+              "
+            >
+              New Profile
+            </span>
+          </button>
+        </section>
+      )}
 
       {/* ── Modal ──────────────────────────────────────────────────────────── */}
       {showNewProfileModal && (
